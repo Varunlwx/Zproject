@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cart Badge Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            padding: 40px;
+            background: #f5f5f5;
+        }
+        
+        .test-container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 20px;
+            background: #fff;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        
+        .icon-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: none;
+            border: none;
+            padding: 8px;
+            cursor: pointer;
+            color: #1A1A1A;
+        }
+        
+        .cart-btn {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: none;
+            border: 2px solid #E85D04;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        
+        .cart-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 5px;
+            background: #E85D04;
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            z-index: 100;
+            pointer-events: none;
+            line-height: 1;
+        }
+        
+        h1 {
+            margin-top: 0;
+        }
+        
+        .description {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .success {
+            color: #2e7d32;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Cart Badge Position Test</h1>
+        
+        <div class="description">
+            <p class="success">✓ The orange badge should appear on the TOP-RIGHT corner of the cart icon below</p>
+            <p>The badge contains the number "3" and has a white border</p>
+        </div>
+        
+        <h2>Test Result:</h2>
+        <div class="header-actions">
+            <!-- Search Icon -->
+            <button class="icon-btn">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+            </button>
+            
+            <!-- Wishlist Icon -->
+            <button class="icon-btn">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                </svg>
+            </button>
+            
+            <!-- Cart Icon WITH BADGE -->
+            <button class="cart-btn">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" />
+                </svg>
+                <span class="cart-badge">3</span>
+            </button>
+        </div>
+        
+        <div style="margin-top: 30px; padding: 15px; background: #fff3e0; border-radius: 4px;">
+            <h3 style="margin-top: 0;">What you should see:</h3>
+            <ul>
+                <li>Cart icon (shopping bag) with an orange border</li>
+                <li>Small orange badge with white border on the <strong>top-right corner</strong> of the cart icon</li>
+                <li>The number "3" in white text inside the badge</li>
+                <li>The badge should overlap the cart icon slightly</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script>
+        // Add some interactivity to show the badge is properly positioned
+        const cartBtn = document.querySelector('.cart-btn');
+        const badge = document.querySelector('.cart-badge');
+        let count = 3;
+        
+        cartBtn.addEventListener('click', () => {
+            count++;
+            badge.textContent = count;
+            cartBtn.style.transform = 'scale(1.1)';
+            setTimeout(() => {
+                cartBtn.style.transform = 'scale(1)';
+            }, 200);
+        });
+    </script>
+</body>
+</html>
