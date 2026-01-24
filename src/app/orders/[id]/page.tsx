@@ -313,10 +313,10 @@ export default function OrderDetailsPage() {
                                 </h3>
                                 <div className="payment-content">
                                     <div className="payment-badge">
-                                        {order.paymentMethod === 'cod' ? '💵' : '📱'}
-                                        <span>{order.paymentMethod === 'cod' ? 'Cash on Delivery' : 'UPI Payment'}</span>
+                                        {order.paymentMethod === 'cod' ? '💵' : '💳'}
+                                        <span>{order.paymentMethod === 'cod' ? 'Cash on Delivery' : 'Paid Online'}</span>
                                     </div>
-                                    {order.upiId && <p className="upi-id">UPI: {order.upiId}</p>}
+                                    {order.paymentId && <p className="payment-id">Payment ID: {order.paymentId}</p>}
                                 </div>
                             </div>
 

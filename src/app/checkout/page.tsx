@@ -11,6 +11,7 @@ import { useToast } from '@/contexts/toast-context';
 import { useAddresses } from '@/contexts/address-context';
 import Navbar from '@/components/Navbar';
 import Breadcrumb from '@/components/Breadcrumb';
+import { createRazorpayPayment, RazorpaySuccessResponse } from '@/lib/razorpay';
 
 export default function CheckoutPage() {
     const router = useRouter();
@@ -21,7 +22,7 @@ export default function CheckoutPage() {
     const { addresses } = useAddresses();
 
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [paymentMethod, setPaymentMethod] = useState<'upi' | 'cod'>('cod');
+    const [paymentMethod, setPaymentMethod] = useState<'online' | 'cod'>('online');
     const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
 
     // Form state
@@ -89,11 +90,6 @@ export default function CheckoutPage() {
             return;
         }
 
-        if (paymentMethod === 'upi' && !formData.upiId) {
-            showToast('Please enter UPI ID', 'error');
-            return;
-        }
-
         if (cartItems.length === 0) {
             showToast('Your cart is empty', 'error');
             return;
@@ -126,21 +122,82 @@ export default function CheckoutPage() {
                     pincode: formData.pincode,
                 },
                 paymentMethod,
-                ...(paymentMethod === 'upi' && formData.upiId ? { upiId: formData.upiId } : {}),
             };
 
-            const order = await addOrder(orderData);
+            if (paymentMethod === 'cod') {
+                // COD: Create order directly
+                const order = await addOrder(orderData);
+                clearCart();
+                showToast(`Order placed successfully! Order ID: ${order.id}`, 'success');
+                router.push(`/order-confirmation/${order.id}`);
+            } else {
+                // ONLINE: Use Razorpay
+                // 1. Create Razorpay order via API
+                const response = await fetch('/api/razorpay/create-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        amount: cartTotal * 100, // Convert to paise
+                        receipt: `order_${Date.now()}`,
+                        notes: { userId: user?.uid },
+                    }),
+                });
 
-            // Clear cart
-            clearCart();
+                if (!response.ok) {
+                    throw new Error('Failed to create payment order');
+                }
 
-            // Show success and redirect
-            showToast(`Order placed successfully! Order ID: ${order.id}`, 'success');
-            router.push(`/order-confirmation/${order.id}`);
+                const { orderId } = await response.json();
+
+                // 2. Open Razorpay payment modal
+                await createRazorpayPayment(
+                    {
+                        amount: cartTotal * 100,
+                        orderId,
+                        customerName: formData.fullName,
+                        customerEmail: formData.email,
+                        customerPhone: formData.phone,
+                    },
+                    // On Success
+                    async (paymentResponse: RazorpaySuccessResponse) => {
+                        try {
+                            // 3. Verify payment
+                            const verifyRes = await fetch('/api/razorpay/verify', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(paymentResponse),
+                            });
+
+                            if (verifyRes.ok) {
+                                // 4. Create order in Firebase with payment ID
+                                const order = await addOrder({
+                                    ...orderData,
+                                    paymentId: paymentResponse.razorpay_payment_id,
+                                    razorpayOrderId: paymentResponse.razorpay_order_id,
+                                });
+                                clearCart();
+                                showToast('Payment successful!', 'success');
+                                router.push(`/order-confirmation/${order.id}`);
+                            } else {
+                                showToast('Payment verification failed. Contact support.', 'error');
+                                setIsSubmitting(false);
+                            }
+                        } catch (err) {
+                            console.error('Payment verification error:', err);
+                            showToast('Payment verification failed', 'error');
+                            setIsSubmitting(false);
+                        }
+                    },
+                    // On Failure
+                    (error: string) => {
+                        showToast(error, 'error');
+                        setIsSubmitting(false);
+                    }
+                );
+            }
         } catch (error) {
             console.error('Error placing order:', error);
             showToast('Failed to place order. Please try again.', 'error');
-        } finally {
             setIsSubmitting(false);
         }
     };
@@ -367,6 +424,26 @@ export default function CheckoutPage() {
                             {/* Payment Method */}
                             <h2 className="section-title">Payment Method</h2>
                             <div className="payment-options">
+                                <label className={`payment-option ${paymentMethod === 'online' ? 'selected' : ''}`}>
+                                    <input
+                                        type="radio"
+                                        name="paymentMethod"
+                                        value="online"
+                                        checked={paymentMethod === 'online'}
+                                        onChange={() => setPaymentMethod('online')}
+                                    />
+                                    <div className="option-content">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                                            <line x1="1" y1="10" x2="23" y2="10" />
+                                        </svg>
+                                        <div>
+                                            <span className="option-title">Pay Online</span>
+                                            <span className="option-desc">UPI, Cards, Netbanking via Razorpay</span>
+                                        </div>
+                                    </div>
+                                </label>
+
                                 <label className={`payment-option ${paymentMethod === 'cod' ? 'selected' : ''}`}>
                                     <input
                                         type="radio"
@@ -377,8 +454,8 @@ export default function CheckoutPage() {
                                     />
                                     <div className="option-content">
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-                                            <line x1="1" y1="10" x2="23" y2="10" />
+                                            <path d="M17 2H7C4.24 2 2 4.24 2 7V17C2 19.76 4.24 22 7 22H17C19.76 22 22 19.76 22 17V7C22 4.24 19.76 2 17 2Z" />
+                                            <path d="M8 12L11 15L16 9" />
                                         </svg>
                                         <div>
                                             <span className="option-title">Cash on Delivery</span>
@@ -386,101 +463,67 @@ export default function CheckoutPage() {
                                         </div>
                                     </div>
                                 </label>
-
-                                <label className={`payment-option ${paymentMethod === 'upi' ? 'selected' : ''}`}>
-                                    <input
-                                        type="radio"
-                                        name="paymentMethod"
-                                        value="upi"
-                                        checked={paymentMethod === 'upi'}
-                                        onChange={() => setPaymentMethod('upi')}
-                                    />
-                                    <div className="option-content">
-                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <path d="M17 2H7C4.24 2 2 4.24 2 7V17C2 19.76 4.24 22 7 22H17C19.76 22 22 19.76 22 17V7C22 4.24 19.76 2 17 2Z" />
-                                            <path d="M8 12L11 15L16 9" />
-                                        </svg>
-                                        <div>
-                                            <span className="option-title">UPI Payment</span>
-                                            <span className="option-desc">Pay via Google Pay, PhonePe, etc.</span>
-                                        </div>
-                                    </div>
-                                </label>
                             </div>
 
-                            {paymentMethod === 'upi' && (
-                                <div className="form-group upi-input">
-                                    <label htmlFor="upiId">UPI ID *</label>
-                                    <input
-                                        type="text"
-                                        id="upiId"
-                                        name="upiId"
-                                        value={formData.upiId}
-                                        onChange={handleInputChange}
-                                        placeholder="yourname@upi"
-                                    />
-                                </div>
-                            )}
-                        </div>
+                            {/* Order Summary */}
+                            <div className="order-summary">
+                                <h2>Order Summary</h2>
 
-                        {/* Order Summary */}
-                        <div className="order-summary">
-                            <h2>Order Summary</h2>
-
-                            <div className="order-items">
-                                {cartItems.map((item) => (
-                                    <div key={item.id} className="order-item">
-                                        <div className="item-image">
-                                            <Image src={item.image} alt={item.name} fill style={{ objectFit: 'cover' }} />
-                                        </div>
-                                        <div className="item-info">
-                                            <h4>{item.name}</h4>
-                                            <div className="item-meta">
-                                                <span className="item-price">{item.price}</span>
-                                                <span className="item-qty">Qty: {item.quantity}</span>
+                                <div className="order-items">
+                                    {cartItems.map((item) => (
+                                        <div key={item.id} className="order-item">
+                                            <div className="item-image">
+                                                <Image src={item.image} alt={item.name} fill style={{ objectFit: 'cover' }} />
+                                            </div>
+                                            <div className="item-info">
+                                                <h4>{item.name}</h4>
+                                                <div className="item-meta">
+                                                    <span className="item-price">{item.price}</span>
+                                                    <span className="item-qty">Qty: {item.quantity}</span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
+
+                                <div className="summary-divider"></div>
+
+                                <div className="summary-row">
+                                    <span>Subtotal ({cartCount} items)</span>
+                                    <span>₹{cartTotal.toLocaleString()}</span>
+                                </div>
+                                <div className="summary-row">
+                                    <span>Shipping</span>
+                                    <span className="free-shipping">FREE</span>
+                                </div>
+                                <div className="summary-divider"></div>
+                                <div className="summary-row total">
+                                    <span>Total</span>
+                                    <span>₹{cartTotal.toLocaleString()}</span>
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    className="place-order-btn"
+                                    disabled={isSubmitting}
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <span className="spinner"></span>
+                                            Placing Order...
+                                        </>
+                                    ) : (
+                                        <>
+                                            Place Order
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <polyline points="9 18 15 12 9 6" />
+                                            </svg>
+                                        </>
+                                    )}
+                                </button>
+
+
                             </div>
-
-                            <div className="summary-divider"></div>
-
-                            <div className="summary-row">
-                                <span>Subtotal ({cartCount} items)</span>
-                                <span>₹{cartTotal.toLocaleString()}</span>
-                            </div>
-                            <div className="summary-row">
-                                <span>Shipping</span>
-                                <span className="free-shipping">FREE</span>
-                            </div>
-                            <div className="summary-divider"></div>
-                            <div className="summary-row total">
-                                <span>Total</span>
-                                <span>₹{cartTotal.toLocaleString()}</span>
-                            </div>
-
-                            <button
-                                type="submit"
-                                className="place-order-btn"
-                                disabled={isSubmitting}
-                            >
-                                {isSubmitting ? (
-                                    <>
-                                        <span className="spinner"></span>
-                                        Placing Order...
-                                    </>
-                                ) : (
-                                    <>
-                                        Place Order
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <polyline points="9 18 15 12 9 6" />
-                                        </svg>
-                                    </>
-                                )}
-                            </button>
-
-
                         </div>
                     </div>
                 </form>

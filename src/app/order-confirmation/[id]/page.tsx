@@ -133,9 +133,9 @@ export default function OrderConfirmationPage() {
                                             <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
                                             <line x1="1" y1="10" x2="23" y2="10" />
                                         </svg>
-                                        <span>{order.paymentMethod === 'cod' ? 'Cash on Delivery' : 'UPI Payment'}</span>
+                                        <span>{order.paymentMethod === 'cod' ? 'Cash on Delivery' : 'Paid Online'}</span>
                                     </div>
-                                    {order.upiId && <p className="upi-id">{order.upiId}</p>}
+                                    {order.paymentId && <p className="payment-id">Payment ID: {order.paymentId}</p>}
                                     <p className="date">Placed on {formatDate(order.createdAt)}</p>
                                 </div>
                             </div>

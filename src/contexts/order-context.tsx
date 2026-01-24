@@ -50,8 +50,9 @@ export interface Order {
         state: string;
         pincode: string;
     };
-    paymentMethod: 'upi' | 'cod';
-    upiId?: string;
+    paymentMethod: 'online' | 'cod';
+    paymentId?: string;  // Razorpay payment ID
+    razorpayOrderId?: string;  // Razorpay order ID
     status: OrderStatus;
     statusMessage: string;
     createdAt: string;
