@@ -53,6 +53,10 @@ export interface Order {
     paymentMethod: 'online' | 'cod';
     paymentId?: string;  // Razorpay payment ID
     razorpayOrderId?: string;  // Razorpay order ID
+    // Shiprocket shipment fields
+    shipmentId?: string;  // Shiprocket shipment ID
+    awbCode?: string;  // Airway Bill code for tracking
+    courierName?: string;  // Courier company name
     status: OrderStatus;
     statusMessage: string;
     createdAt: string;
