@@ -13,6 +13,33 @@ import { useProducts } from '@/contexts/product-context';
 import { categories } from '@/data/products';
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
 
+// Helper to format price with ₹ symbol (handles both "₹1,599" and "1599" formats)
+const formatPrice = (price: string | number): string => {
+    if (typeof price === 'number') {
+        return `₹${price.toLocaleString('en-IN')}`;
+    }
+    // If already formatted with ₹, return as-is
+    if (price.includes('₹')) return price;
+    // Otherwise, format the number
+    const numPrice = parseInt(price.replace(/[^0-9]/g, ''));
+    return isNaN(numPrice) ? price : `₹${numPrice.toLocaleString('en-IN')}`;
+};
+
+// Helper to parse numeric price
+const parsePrice = (price: string | number): number => {
+    if (typeof price === 'number') return price;
+    return parseInt(price.replace(/[₹,]/g, '')) || 0;
+};
+
+// Helper to calculate discount percentage
+const calculateDiscount = (price: string | number, originalPrice: string | number | undefined): number => {
+    if (!originalPrice) return 0;
+    const current = parsePrice(price);
+    const original = parsePrice(originalPrice);
+    if (original <= 0 || current >= original) return 0;
+    return Math.round(((original - current) / original) * 100);
+};
+
 const Breadcrumb = dynamic(() => import('@/components/Breadcrumb'), {
     loading: () => <div className="breadcrumb-skeleton" style={{ height: '20px', width: '200px', background: '#f0f0f0', borderRadius: '4px' }}></div>,
     ssr: true
@@ -412,16 +439,26 @@ function ShopContent() {
                                 <div className="product-info">
                                     <span className="product-category">{product.category}</span>
                                     <h4>{product.name}</h4>
-                                    <div className="product-rating">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="#E85D04">
-                                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                                        </svg>
-                                        <span>{product.rating}</span>
-                                    </div>
+                                    {product.rating > 0 && (
+                                        <div className="product-rating">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="#E85D04">
+                                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                                            </svg>
+                                            <span>{product.rating}</span>
+                                            {product.reviewCount > 0 && <span className="review-count">({product.reviewCount})</span>}
+                                        </div>
+                                    )}
                                     <div className="price-row">
                                         <div className="price-container">
-                                            <p className="price">{product.price}</p>
-                                            {product.originalPrice && <p className="original-price">{product.originalPrice}</p>}
+                                            <p className="price">{formatPrice(product.price)}</p>
+                                            {product.originalPrice && (
+                                                <>
+                                                    <p className="original-price">{formatPrice(product.originalPrice)}</p>
+                                                    {calculateDiscount(product.price, product.originalPrice) > 0 && (
+                                                        <span className="discount-badge">{calculateDiscount(product.price, product.originalPrice)}% OFF</span>
+                                                    )}
+                                                </>
+                                            )}
                                         </div>
                                         <button
                                             className="price-cart-btn"
@@ -605,12 +642,15 @@ function ShopContent() {
         .wishlist-btn:hover svg { stroke: #DC2626; }
         .product-info { padding: 16px; background: var(--surface); }
         .product-category { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; display: none; }
-        .product-info h4 { font-size: 15px; font-weight: 600; margin: 0 0 12px; color: var(--primary); }
-        .product-rating { display: none; }
+        .product-info h4 { font-size: 15px; font-weight: 600; margin: 0 0 8px; color: var(--primary); }
+        .product-rating { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+        .product-rating span { font-size: 12px; font-weight: 600; color: var(--primary); }
+        .review-count { font-weight: 400; color: var(--muted); }
         .price-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-        .price-container { display: flex; align-items: center; gap: 8px; }
+        .price-container { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .price { font-size: 17px; font-weight: 700; color: var(--secondary); margin: 0; }
         .original-price { font-size: 13px; color: var(--muted); text-decoration: line-through; margin: 0; }
+        .discount-badge { font-size: 11px; font-weight: 700; color: #16A34A; background: #DCFCE7; padding: 2px 6px; border-radius: 4px; }
         .price-cart-btn { position: relative; width: 40px; height: 36px; background: #1A1A1A; color: white; border: none; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
         .price-cart-btn:hover { background: #333; transform: scale(1.05); }
         .cart-item-badge { position: absolute; top: -8px; right: -8px; background: var(--secondary); color: white; font-size: 10px; font-weight: 700; min-width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0 2px; border: 2px solid var(--surface); }
