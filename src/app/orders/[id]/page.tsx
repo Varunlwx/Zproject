@@ -249,6 +249,15 @@ export default function OrderDetailsPage() {
                                     ← Back to Orders
                                 </Link>
                             </div>
+
+                            {/* Need Help */}
+                            <div className="help-card">
+                                <h4>Need Help?</h4>
+                                <p>Contact our support team for any queries about this order.</p>
+                                <a href="mailto:support@zcloths.com" className="help-link">
+                                    Contact Support →
+                                </a>
+                            </div>
                         </div>
 
                         {/* Right: Summary Cards */}
@@ -318,15 +327,6 @@ export default function OrderDetailsPage() {
                                     </div>
                                     {order.paymentId && <p className="payment-id">Payment ID: {order.paymentId}</p>}
                                 </div>
-                            </div>
-
-                            {/* Need Help */}
-                            <div className="help-card">
-                                <h4>Need Help?</h4>
-                                <p>Contact our support team for any queries about this order.</p>
-                                <a href="mailto:support@zcloths.com" className="help-link">
-                                    Contact Support →
-                                </a>
                             </div>
                         </div>
                     </div>
@@ -434,10 +434,10 @@ export default function OrderDetailsPage() {
                 .upi-id { font-size: 13px; color: #6B6B6B; font-family: monospace; margin: 0; }
 
                 /* Help Card */
-                .help-card { background: linear-gradient(135deg, #FFF7ED 0%, #FEF3C7 100%); border-radius: 16px; padding: 20px; text-align: center; }
-                .help-card h4 { font-size: 15px; font-weight: 700; margin: 0 0 8px; color: #1A1A1A; }
-                .help-card p { font-size: 13px; color: #6B6B6B; margin: 0 0 16px; }
-                .help-link { display: inline-flex; align-items: center; gap: 6px; color: #E85D04; font-weight: 600; font-size: 14px; text-decoration: none; }
+                .help-card { background: linear-gradient(135deg, #FFF7ED 0%, #FEF3C7 100%); border-radius: 16px; padding: 28px 32px; text-align: left; width: 100%; }
+                .help-card h4 { font-size: 17px; font-weight: 700; margin: 0 0 10px; color: #1A1A1A; }
+                .help-card p { font-size: 14px; color: #6B6B6B; margin: 0 0 20px; line-height: 1.5; }
+                .help-link { display: inline-flex; align-items: center; gap: 6px; color: #E85D04; font-weight: 600; font-size: 15px; text-decoration: none; }
                 .help-link:hover { text-decoration: underline; }
 
                 @media (max-width: 768px) {
@@ -447,6 +447,6 @@ export default function OrderDetailsPage() {
                     .order-header-top { flex-direction: column; gap: 16px; }
                 }
             `}</style>
-        </div>
+        </div >
     );
 }

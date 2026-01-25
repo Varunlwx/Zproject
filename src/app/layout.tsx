@@ -11,6 +11,7 @@ import { ProductProvider } from "@/contexts/product-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Analytics } from "@/components/Analytics";
 import { CookieConsent } from "@/components/CookieConsent";
+import { NotificationHandler } from "@/components/NotificationHandler";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -114,6 +115,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable}`} suppressHydrationWarning>
         <AuthProvider>
+          <NotificationHandler />
           <ToastProvider>
             <ProductProvider>
               <WishlistProvider>
