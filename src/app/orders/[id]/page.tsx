@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -23,6 +24,13 @@ export default function OrderDetailsPage() {
 
     const order = getOrderById(id as string);
 
+    // Redirect if not logged in (client-side only)
+    useEffect(() => {
+        if (!loading && !user) {
+            router.push('/login?redirect=/orders/' + id);
+        }
+    }, [user, loading, router, id]);
+
     if (loading) {
         return (
             <div className="loading-page">
@@ -36,9 +44,20 @@ export default function OrderDetailsPage() {
         );
     }
 
-    if (!user) {
-        router.push('/login?redirect=/orders/' + id);
-        return null;
+    // Show loading during redirect
+    if (!user && !loading) {
+        return (
+            <div className="loading-page">
+                <div className="loader"></div>
+                <p>Redirecting to login...</p>
+                <style jsx>{`
+                    .loading-page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #FAFAFA; gap: 16px; }
+                    .loader { width: 40px; height: 40px; border: 3px solid #E5E5E5; border-top-color: #E85D04; border-radius: 50%; animation: spin 1s linear infinite; }
+                    p { color: #6B6B6B; font-size: 14px; }
+                    @keyframes spin { to { transform: rotate(360deg); } }
+                `}</style>
+            </div>
+        );
     }
 
     if (!order) {
@@ -203,7 +222,7 @@ export default function OrderDetailsPage() {
                                             <h3 className="item-name">{item.name}</h3>
                                             <div className="item-details-row">
                                                 <span className="item-qty">Qty: {item.quantity}</span>
-                                                <span className="item-price">{item.price}</span>
+                                                <span className="item-price">₹{item.price}</span>
                                             </div>
                                             {order.status === 'delivered' && !item.review && (
                                                 <Link href={`/orders?review=${order.id}&item=${item.id}`} className="rate-btn">

@@ -15,6 +15,10 @@ const Breadcrumb = dynamic(() => import('@/components/Breadcrumb'), {
 import { useWishlist } from '@/contexts/wishlist-context';
 import { useCart } from '@/contexts/cart-context';
 import { useProducts, Product } from '@/contexts/product-context';
+import { useAuth } from '@/contexts/auth-context';
+import { useOrders } from '@/contexts/order-context';
+import { StockService } from '@/services/stock-service';
+import { useToast } from '@/contexts/toast-context';
 
 export default function ProductDetailsPage() {
     const params = useParams();
@@ -28,16 +32,23 @@ export default function ProductDetailsPage() {
 
     const { toggleWishlist, isInWishlist } = useWishlist();
     const { addToCart } = useCart();
+    const { user } = useAuth();
     const { getProductById, getSimilarProducts, getDiscountPercent } = useProducts();
+    const { showToast } = useToast();
 
     useEffect(() => {
-        const foundProduct = getProductById(productId);
-        if (foundProduct) {
-            setProduct(foundProduct);
-            setSelectedSize(foundProduct.sizes[0] || null);
-            setSelectedImageIndex(0);
-        }
+        const fetchProduct = async () => {
+            const foundProduct = await getProductById(productId);
+            if (foundProduct) {
+                setProduct(foundProduct);
+                setSelectedSize(foundProduct.sizes[0] || null);
+                setSelectedImageIndex(0);
+            }
+        };
+        fetchProduct();
     }, [productId, getProductById]);
+
+    // Review submission logic removed - now handled in My Orders
 
     if (!product) {
         return (
@@ -57,9 +68,16 @@ export default function ProductDetailsPage() {
 
     const handleAddToCart = () => {
         if (!selectedSize) {
-            alert('Please select a size');
+            showToast('Please select a size', 'error');
             return;
         }
+
+        // Check stock availability only if stock tracking is enabled
+        if (product.stock && !StockService.isInStock(product.stock, selectedSize)) {
+            showToast('This size is out of stock', 'error');
+            return;
+        }
+
         addToCart(product);
     };
 
@@ -145,10 +163,10 @@ export default function ProductDetailsPage() {
 
                         {/* Price */}
                         <div className="price-row">
-                            <span className="price">{product.price}</span>
+                            <span className="price">₹{product.price}</span>
                             {product.originalPrice && (
                                 <>
-                                    <span className="original-price">{product.originalPrice}</span>
+                                    <span className="original-price">₹{product.originalPrice}</span>
                                     <span className="discount-badge">{discountPercent}</span>
                                 </>
                             )}
@@ -160,15 +178,25 @@ export default function ProductDetailsPage() {
                         <div className="size-section">
                             <h3>Select Size</h3>
                             <div className="size-options">
-                                {product.sizes.map((size) => (
-                                    <button
-                                        key={size}
-                                        className={`size-chip ${selectedSize === size ? 'selected' : ''}`}
-                                        onClick={() => setSelectedSize(size)}
-                                    >
-                                        {size}
-                                    </button>
-                                ))}
+                                {product.sizes.map((size) => {
+                                    // If stock exists, use it; otherwise default to available
+                                    const isAvailable = product.stock
+                                        ? StockService.isInStock(product.stock, size)
+                                        : true; // Default to available if no stock tracking
+
+                                    return (
+                                        <button
+                                            key={size}
+                                            className={`size-chip ${selectedSize === size ? 'selected' : ''
+                                                } ${!isAvailable ? 'disabled' : ''}`}
+                                            onClick={() => isAvailable && setSelectedSize(size)}
+                                            disabled={!isAvailable}
+                                        >
+                                            <span className="size-text">{size}</span>
+                                            {!isAvailable && <span className="slash-overlay"></span>}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
 
@@ -196,11 +224,15 @@ export default function ProductDetailsPage() {
                                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
                                 </svg>
                             </button>
-                            <button className="add-to-cart-btn" onClick={handleAddToCart}>
+                            <button
+                                className="add-to-cart-btn"
+                                onClick={handleAddToCart}
+                                disabled={product.stock ? StockService.isOutOfStock(product.stock) : false}
+                            >
                                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" />
                                 </svg>
-                                ADD TO CART
+                                {(product.stock && StockService.isOutOfStock(product.stock)) ? 'OUT OF STOCK' : 'ADD TO CART'}
                             </button>
                         </div>
                     </div>
@@ -240,9 +272,12 @@ export default function ProductDetailsPage() {
                                     <div className="similar-info">
                                         <h4>{similarProduct.name}</h4>
                                         <div className="similar-price-row">
-                                            <span className="similar-price">{similarProduct.price}</span>
+                                            <span className="similar-price">₹{similarProduct.price}</span>
                                             {similarProduct.originalPrice && (
-                                                <span className="similar-original">{similarProduct.originalPrice}</span>
+                                                <>
+                                                    <span className="similar-original">₹{similarProduct.originalPrice}</span>
+                                                    <span className="discount-badge">{getDiscountPercent(similarProduct)}</span>
+                                                </>
                                             )}
                                         </div>
                                     </div>
@@ -250,7 +285,8 @@ export default function ProductDetailsPage() {
                             ))}
                         </div>
                     </section>
-                )}
+                )
+                }
 
                 {/* Footer */}
                 <footer className="footer">
@@ -289,25 +325,8 @@ export default function ProductDetailsPage() {
                         </div>
                     </div>
                 </footer>
-            </main>
+            </main >
 
-            {/* Mobile Bottom Bar */}
-            <div className="bottom-bar">
-                <button
-                    className={`bottom-wishlist-btn ${inWishlist ? 'active' : ''}`}
-                    onClick={handleToggleWishlist}
-                >
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill={inWishlist ? '#E85D04' : 'none'} stroke={inWishlist ? '#E85D04' : 'currentColor'} strokeWidth="2">
-                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                    </svg>
-                </button>
-                <button className="bottom-cart-btn" onClick={handleAddToCart}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" />
-                    </svg>
-                    ADD TO CART
-                </button>
-            </div>
 
             <style jsx>{`
                 :root {
@@ -376,9 +395,28 @@ export default function ProductDetailsPage() {
                 /* Size Section */
                 .size-section h3 { font-size: 16px; font-weight: 600; margin: 0 0 16px; color: var(--primary); }
                 .size-options { display: flex; flex-wrap: wrap; gap: 12px; }
-                .size-chip { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; background: var(--surface); border: 2px solid var(--border); border-radius: 12px; font-size: 16px; font-weight: 600; color: var(--primary); cursor: pointer; transition: all 0.2s; }
+                .size-chip { position: relative; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; background: var(--surface); border: 2px solid #DDD; border-radius: 12px; font-size: 16px; font-weight: 600; color: var(--primary); cursor: pointer; transition: all 0.2s; overflow: hidden; }
                 .size-chip:hover { border-color: var(--primary); background: #F5F5F5; }
                 .size-chip.selected { background: #1A1A1A; color: #FFFFFF; border-color: #1A1A1A; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+                .size-chip.disabled { 
+                    opacity: 1; 
+                    cursor: not-allowed; 
+                    background: #F9F9F9;
+                    pointer-events: none;
+                    border-color: #EEE;
+                    color: #BBB;
+                }
+                .size-text { position: relative; z-index: 1; }
+                .size-chip .slash-overlay {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    width: 140%;
+                    height: 1.5px;
+                    background: #BBB;
+                    transform: translate(-50%, -50%) rotate(-45deg);
+                    z-index: 2;
+                }
 
                 /* Description */
                 .description-section { margin-top: 24px; }
@@ -387,14 +425,23 @@ export default function ProductDetailsPage() {
                 .description-text.expanded { -webkit-line-clamp: unset; display: block; }
                 .read-more-btn { background: none; border: none; color: var(--secondary); font-size: 14px; font-weight: 600; cursor: pointer; padding: 0; margin-top: 8px; }
 
-                /* Desktop Actions */
-                .desktop-actions { display: none; gap: 16px; margin-top: 32px; padding: 24px 0; }
-                @media (min-width: 768px) { .desktop-actions { display: flex; } }
+                /* Actions */
+                .desktop-actions { display: flex; gap: 16px; margin-top: 32px; padding: 24px 0; }
                 .wishlist-btn { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; background: var(--surface); border: 2px solid var(--border); border-radius: 14px; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
                 .wishlist-btn:hover { border-color: var(--secondary); background: #FFF5F0; }
                 .wishlist-btn.active { background: #FFF5F0; border-color: var(--secondary); }
                 .add-to-cart-btn { flex: 1; height: 60px; display: flex; align-items: center; justify-content: center; gap: 12px; background: #1A1A1A; color: #FFFFFF; border: none; border-radius: 14px; font-size: 16px; font-weight: 700; letter-spacing: 1px; cursor: pointer; transition: all 0.2s; }
                 .add-to-cart-btn:hover { background: #E85D04; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(232, 93, 4, 0.3); }
+                .add-to-cart-btn:disabled {
+                    background: #9CA3AF;
+                    cursor: not-allowed;
+                    opacity: 0.6;
+                }
+                .add-to-cart-btn:disabled:hover {
+                    transform: none;
+                    box-shadow: none;
+                    background: #9CA3AF;
+                }
 
                 /* Similar Products */
                 .similar-section { padding: 32px 24px; background: var(--surface); margin-top: 8px; }
@@ -418,6 +465,8 @@ export default function ProductDetailsPage() {
                 .footer { background: #111; color: white; padding: 48px 24px 40px; }
                 @media (min-width: 768px) { .footer { padding: 80px 48px 40px; } }
                 @media (min-width: 1200px) { .footer { padding: 100px 80px 48px; } }
+                .reviews-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 32px; }
+                .reviews-grid.no-form { grid-template-columns: 1fr; }
                 .footer-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
                 .footer-brand { grid-column: 1 / -1; margin-bottom: 16px; }
                 @media (min-width: 768px) { .footer-grid { grid-template-columns: 2fr 1fr 1fr 1fr; gap: 64px; } .footer-brand { grid-column: auto; margin-bottom: 0; } }
@@ -434,13 +483,7 @@ export default function ProductDetailsPage() {
                 .footer-links a { font-size: 13px; color: rgba(255,255,255,0.5); text-decoration: none; }
                 .footer-links a:hover { color: white; }
 
-                /* Mobile Bottom Bar */
-                .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; gap: 16px; padding: 20px; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -4px 10px rgba(0,0,0,0.04); z-index: 100; }
-                @media (min-width: 768px) { .bottom-bar { display: none; } }
-                .bottom-wishlist-btn { width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; background: var(--surface); border: 2px solid var(--border); border-radius: 14px; cursor: pointer; flex-shrink: 0; }
-                .bottom-wishlist-btn.active { background: #FFF5F0; border-color: var(--secondary); }
-                .bottom-cart-btn { flex: 1; height: 56px; display: flex; align-items: center; justify-content: center; gap: 12px; background: var(--primary); color: white; border: none; border-radius: 14px; font-size: 15px; font-weight: 700; letter-spacing: 1px; cursor: pointer; }
             `}</style>
-        </div>
+        </div >
     );
 }

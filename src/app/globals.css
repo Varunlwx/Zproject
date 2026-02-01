@@ -407,3 +407,36 @@ body {
   flex-shrink: 0;
   margin-left: auto;
 }
+
+/* Discount Badge */
+.discount-badge {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #16A34A !important;
+  background: #DCFCE7 !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  margin-left: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+.price-container,
+.price-info,
+.item-prices,
+.item-prices-container,
+.similar-price-row {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 4px !important;
+}
+
+.original-price,
+.item-original,
+.similar-original {
+  color: var(--color-primary-muted);
+  text-decoration: line-through;
+  font-size: 0.85em;
+  opacity: 0.8;
+}

@@ -11,7 +11,7 @@ service cloud.firestore {
     // Helper function to check if user is admin
     function isAdmin() {
       return isSignedIn() && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
     }
     
     // Helper function to check if user owns the document
@@ -28,14 +28,17 @@ service cloud.firestore {
 
       // Orders subcollection (used by apps)
       match /orders/{orderId} {
-        allow read, list: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId);
-        allow update: if isAdmin();
+        allow read, write: if isOwner(userId) || isAdmin();
       }
 
       // Addresses subcollection (used by apps)
       match /addresses/{addressId} {
         allow read, list, write: if isOwner(userId) || isAdmin();
+      }
+
+      // Cart subcollection
+      match /cart/{itemId} {
+        allow read, write: if isOwner(userId) || isAdmin();
       }
     }
     
@@ -49,10 +52,8 @@ service cloud.firestore {
     
     // Top-level collections (fallback/admin access)
     match /orders/{orderId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read, write: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow list: if isAdmin();
-      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
-      allow update: if isAdmin();
     }
     
     match /addresses/{addressId} {

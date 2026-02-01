@@ -1,18 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { trackShipment, trackByShipmentId } from '@/lib/shiprocket';
+import { requireAuth } from '@/lib/auth-middleware';
+import { requireValidOrigin } from '@/lib/csrf-protection';
+import { withRateLimit, mediumLimiter } from '@/lib/rate-limit';
+import { trackShipmentSchema, formatValidationErrors } from '@/lib/validation-schemas';
 
 export async function GET(request: NextRequest) {
     try {
-        const { searchParams } = new URL(request.url);
-        const awb = searchParams.get('awb');
-        const shipmentId = searchParams.get('shipmentId');
+        // 1. CSRF Protection
+        requireValidOrigin(request);
 
-        if (!awb && !shipmentId) {
+        // 2. Authentication
+        const user = await requireAuth(request);
+
+        // 3. Rate Limiting
+        const rateLimitResponse = await withRateLimit(request, mediumLimiter, user.uid);
+        if (rateLimitResponse) return rateLimitResponse;
+
+        // 4. Input Validation (Zod)
+        const { searchParams } = new URL(request.url);
+        const queryParams = Object.fromEntries(searchParams.entries());
+        const validation = trackShipmentSchema.safeParse(queryParams);
+
+        if (!validation.success) {
             return NextResponse.json(
-                { error: 'Either awb or shipmentId is required' },
+                {
+                    error: 'Validation failed',
+                    details: formatValidationErrors(validation.error)
+                },
                 { status: 400 }
             );
         }
+
+        const { awb, shipmentId } = validation.data;
+
 
         const trackingData = awb
             ? await trackShipment(awb)
@@ -42,6 +63,15 @@ export async function GET(request: NextRequest) {
         });
     } catch (error) {
         console.error('Shiprocket tracking error:', error);
+
+        // Handle authentication errors
+        if (error instanceof Error && error.message === 'Authentication required') {
+            return NextResponse.json(
+                { error: 'Please sign in to track shipment' },
+                { status: 401 }
+            );
+        }
+
         return NextResponse.json(
             { error: error instanceof Error ? error.message : 'Failed to track shipment' },
             { status: 500 }

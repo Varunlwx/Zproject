@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useOrders, OrderStatus } from '@/contexts/order-context';
 import Navbar from '@/components/Navbar';
 import Breadcrumb from '@/components/Breadcrumb';
+import { toast } from 'react-hot-toast';
 
 // Helper to normalize image paths - ensures path starts with / and has fallback
 const normalizeImagePath = (path: string | undefined): string => {
@@ -28,6 +29,7 @@ export default function OrdersPage() {
     const [comment, setComment] = useState('');
     const [reviewImages, setReviewImages] = useState<string[]>([]);
     const [uploading, setUploading] = useState(false);
+    const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
     const openFeedbackModal = (orderId: string, itemId: string, name: string) => {
         setSelectedItem({ orderId, itemId, name });
@@ -61,16 +63,26 @@ export default function OrdersPage() {
         }
     };
 
-    const submitFeedback = (e: React.FormEvent) => {
+    const submitFeedback = async (e: React.FormEvent) => {
         e.preventDefault();
         if (selectedItem && rating > 0) {
-            const userName = user?.displayName || user?.email?.split('@')[0] || 'Anonymous';
-            addReview(selectedItem.orderId, selectedItem.itemId, {
-                rating,
-                comment,
-                images: reviewImages
-            }, userName);
-            setShowFeedbackModal(false);
+            try {
+                setIsSubmittingReview(true);
+                const userName = user?.displayName || user?.email?.split('@')[0] || 'Anonymous';
+                await addReview(selectedItem.orderId, selectedItem.itemId, {
+                    rating,
+                    comment,
+                    images: reviewImages
+                }, userName);
+
+                toast.success('Review submitted for moderation!');
+                setShowFeedbackModal(false);
+            } catch (error) {
+                console.error('Error submitting review:', error);
+                toast.error('Failed to submit review');
+            } finally {
+                setIsSubmittingReview(false);
+            }
         }
     };
 
@@ -194,7 +206,7 @@ export default function OrdersPage() {
                                                             <span className="item-name">{item.name}</span>
                                                             <span className="item-qty">Qty: {item.quantity}</span>
                                                         </div>
-                                                        <span className="item-price">{item.price}</span>
+                                                        <span className="item-price">₹{item.price}</span>
                                                     </div>
                                                 ))}
                                                 {order.items.length > 2 && (
@@ -355,8 +367,10 @@ export default function OrdersPage() {
                                 <button type="button" className="cancel-btn" onClick={() => setShowFeedbackModal(false)}>
                                     Cancel
                                 </button>
-                                <button type="submit" className="submit-feedback-btn" disabled={rating === 0}>
-                                    Submit Feedback
+                                <button type="submit" className="submit-feedback-btn" disabled={rating === 0 || isSubmittingReview}>
+                                    {isSubmittingReview ? (
+                                        <div className="btn-loader"></div>
+                                    ) : 'Submit Feedback'}
                                 </button>
                             </div>
                         </form>
@@ -684,6 +698,9 @@ export default function OrdersPage() {
                 
                 .cancel-btn { flex: 1; padding: 14px; background: #F3F4F6; color: #1F2937; border: 1px solid #E5E7EB; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; transition: all 0.2s; }
                 .cancel-btn:hover { background: #E5E7EB; }
+                
+                .btn-loader { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
                 .modal-footer { padding: 16px 20px; border-top: 1px solid var(--border); background: white; flex-shrink: 0; display: flex; gap: 12px; }
                 .close-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s; }

@@ -171,19 +171,85 @@ export default function ProfilePage() {
                     </div>
                     <h2>Sign in to view your profile</h2>
                     <p>Access your orders, wishlist, and account settings</p>
-                    <Link href="/login" className="sign-in-btn">Sign In</Link>
-                    <Link href="/" className="back-home">← Back to Home</Link>
+                    <div className="btn-container">
+                        <Link href="/login" className="sign-in-btn">Sign In</Link>
+                        <Link href="/" className="back-home">← Back to Home</Link>
+                    </div>
                 </div>
                 <style jsx>{`
-                    .not-logged-in { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #FAFAFA; padding: 24px; }
-                    .content { text-align: center; max-width: 400px; }
-                    .icon-circle { width: 120px; height: 120px; margin: 0 auto 32px; background: rgba(232, 93, 4, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-                    .content h2 { font-size: 22px; font-weight: 700; color: #1A1A1A; margin: 0 0 8px; }
-                    .content p { font-size: 14px; color: #6B6B6B; margin: 0 0 32px; line-height: 1.5; }
-                    .sign-in-btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 32px; background: #E85D04; color: white; text-decoration: none; border-radius: 12px; font-size: 15px; font-weight: 600; transition: background 0.2s; }
-                    .sign-in-btn:hover { background: #1A1A1A; }
-                    .back-home { display: block; margin-top: 20px; color: #6B6B6B; text-decoration: none; font-size: 14px; transition: color 0.2s; }
-                    .back-home:hover { color: #1A1A1A; }
+                    .not-logged-in { 
+                        min-height: 100vh; 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center; 
+                        background: #FAFAFA; 
+                        padding: 24px; 
+                    }
+                    .content { 
+                        text-align: center; 
+                        max-width: 400px; 
+                        width: 100%;
+                    }
+                    .icon-circle { 
+                        width: 120px; 
+                        height: 120px; 
+                        margin: 0 auto 32px; 
+                        background: rgba(232, 93, 4, 0.1); 
+                        border-radius: 50%; 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center; 
+                    }
+                    .content h2 { 
+                        font-size: 24px; 
+                        font-weight: 700; 
+                        color: #1A1A1A; 
+                        margin: 0 0 12px; 
+                    }
+                    .content p { 
+                        font-size: 15px; 
+                        color: #6B6B6B; 
+                        margin: 0 0 40px; 
+                        line-height: 1.6; 
+                    }
+                    .btn-container {
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        gap: 16px;
+                    }
+                    :global(.sign-in-btn) { 
+                        display: inline-flex !important; 
+                        align-items: center; 
+                        justify-content: center;
+                        padding: 16px 48px !important; 
+                        background: #E85D04 !important; 
+                        color: white !important; 
+                        text-decoration: none !important; 
+                        border-radius: 14px !important; 
+                        font-size: 16px !important; 
+                        font-weight: 600 !important; 
+                        transition: all 0.2s !important;
+                        width: 100% !important;
+                        max-width: 240px;
+                        box-shadow: 0 4px 12px rgba(232, 93, 4, 0.2);
+                    }
+                    :global(.sign-in-btn:hover) { 
+                        background: #1A1A1A !important; 
+                        transform: translateY(-2px);
+                        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+                    }
+                    :global(.back-home) { 
+                        display: block !important; 
+                        color: #6B6B6B !important; 
+                        text-decoration: none !important; 
+                        font-size: 14px !important; 
+                        font-weight: 500 !important;
+                        transition: color 0.2s !important; 
+                    }
+                    :global(.back-home:hover) { 
+                        color: #1A1A1A !important; 
+                    }
                 `}</style>
             </div>
         );

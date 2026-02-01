@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useCart } from '@/contexts/cart-context';
 import Navbar from '@/components/Navbar';
 import Breadcrumb from '@/components/Breadcrumb';
+import { getDiscountPercent } from '@/data/products';
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 
@@ -71,9 +72,12 @@ export default function CartPage() {
                                         <div className="item-details">
                                             <h3>{item.name}</h3>
                                             <div className="price-info">
-                                                <span className="price">{item.price}</span>
+                                                <span className="price">₹{item.price}</span>
                                                 {item.originalPrice && (
-                                                    <span className="original-price">{item.originalPrice}</span>
+                                                    <>
+                                                        <span className="original-price">₹{item.originalPrice}</span>
+                                                        <span className="discount-badge">{getDiscountPercent(item as any)}</span>
+                                                    </>
                                                 )}
                                             </div>
                                             <div className="quantity-controls">
@@ -127,7 +131,7 @@ export default function CartPage() {
                                             <div className="order-item-info">
                                                 <h4>{item.name}</h4>
                                                 <div className="order-item-meta">
-                                                    <span className="order-item-price">{item.price}</span>
+                                                    <span className="order-item-price">₹{item.price}</span>
                                                     <span className="order-item-qty">Qty: {item.quantity}</span>
                                                 </div>
                                             </div>

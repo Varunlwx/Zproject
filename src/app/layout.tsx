@@ -115,8 +115,8 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable}`} suppressHydrationWarning>
         <AuthProvider>
-          <NotificationHandler />
           <ToastProvider>
+            <NotificationHandler />
             <ProductProvider>
               <WishlistProvider>
                 <CartProvider>

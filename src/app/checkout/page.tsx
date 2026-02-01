@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -12,6 +12,10 @@ import { useAddresses } from '@/contexts/address-context';
 import Navbar from '@/components/Navbar';
 import Breadcrumb from '@/components/Breadcrumb';
 import { createRazorpayPayment, RazorpaySuccessResponse } from '@/lib/razorpay';
+import { getDiscountPercent } from '@/data/products';
+import { CouponService } from '@/services/coupon-service';
+import { Coupon } from '@/types/schema';
+import { toast } from 'react-hot-toast';
 
 export default function CheckoutPage() {
     const router = useRouter();
@@ -24,6 +28,20 @@ export default function CheckoutPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState<'online' | 'cod'>('online');
     const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+
+    // Coupon state
+    const [couponCode, setCouponCode] = useState('');
+    const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
+    const [discount, setDiscount] = useState(0);
+    const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+    const [couponError, setCouponError] = useState<string | null>(null);
+
+    // Redirect if not logged in (client-side only)
+    useEffect(() => {
+        if (!user) {
+            router.push('/login?redirect=/checkout');
+        }
+    }, [user, router]);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -80,6 +98,42 @@ export default function CheckoutPage() {
         });
     };
 
+    const handleApplyCoupon = async () => {
+        if (!couponCode.trim()) return;
+
+        try {
+            setIsValidatingCoupon(true);
+            const result = await CouponService.validateCoupon(couponCode, cartTotal);
+
+            if (result.valid && result.coupon) {
+                const discountAmount = CouponService.calculateDiscount(result.coupon, cartTotal);
+                setAppliedCoupon(result.coupon);
+                setDiscount(discountAmount);
+                setCouponError(null);
+                toast.success(`Coupon applied! Saved ₹${discountAmount.toLocaleString()}`);
+            } else {
+                setAppliedCoupon(null);
+                setDiscount(0);
+                setCouponError(result.message || 'Invalid coupon');
+                // toast.error(result.message || 'Invalid coupon'); // Removing toast to use inline error
+            }
+        } catch (error) {
+            setCouponError('Error validating coupon');
+        } finally {
+            setIsValidatingCoupon(false);
+        }
+    };
+
+    const handleRemoveCoupon = () => {
+        setAppliedCoupon(null);
+        setDiscount(0);
+        setCouponCode('');
+        setCouponError(null);
+        toast.success('Coupon removed');
+    };
+
+    const finalTotal = cartTotal - discount;
+
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -109,8 +163,9 @@ export default function CheckoutPage() {
                 })),
                 subtotal: cartTotal,
                 deliveryFee: 0,
-                discount: 0,
-                total: cartTotal,
+                discount: discount,
+                total: finalTotal,
+                couponCode: appliedCoupon?.code || null,
                 address: {
                     fullName: formData.fullName,
                     phone: formData.phone,
@@ -125,51 +180,138 @@ export default function CheckoutPage() {
             };
 
             if (paymentMethod === 'cod') {
-                // COD: Create order directly
-                const order = await addOrder(orderData);
+                // COD: Create order with server-side verification
+                if (!user) {
+                    showToast('Please sign in to complete your order', 'error');
+                    router.push('/login?redirect=/checkout');
+                    return;
+                }
+
+                // 1. Get token for authentication
+                const idToken = await user.getIdToken();
+
+                // 2. Validate cart and prices on server
+                const validateResponse = await fetch('/api/orders/validate-cod', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}`,
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({
+                        cartItems: cartItems.map(item => ({
+                            id: item.id,
+                            quantity: item.quantity,
+                        })),
+                        couponCode: appliedCoupon?.code || undefined,
+                    }),
+                });
+
+                if (!validateResponse.ok) {
+                    const errorData = await validateResponse.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'Failed to verify order details');
+                }
+
+                const { verifiedTotal, discount: serverDiscount, finalTotal: serverTotal } = await validateResponse.json();
+
+                // 3. Update order data with server-verified totals
+                const verifiedOrderData = {
+                    ...orderData,
+                    subtotal: verifiedTotal,
+                    discount: serverDiscount,
+                    total: serverTotal,
+                };
+
+                const order = await addOrder(verifiedOrderData);
                 clearCart();
                 showToast(`Order placed successfully! Order ID: ${order.id}`, 'success');
                 router.push(`/order-confirmation/${order.id}`);
             } else {
                 // ONLINE: Use Razorpay
-                // 1. Create Razorpay order via API
+                // 1. Check user authentication
+                if (!user) {
+                    showToast('Please sign in to complete your order', 'error');
+                    router.push('/login?redirect=/checkout');
+                    return;
+                }
+
+                // 2. Get Firebase ID token for authentication
+                const idToken = await user.getIdToken();
+
+                // 3. Create Razorpay order via API (with server-side verification)
                 const response = await fetch('/api/razorpay/create-order', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}`,
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
                     body: JSON.stringify({
-                        amount: cartTotal * 100, // Convert to paise
+                        cartItems: cartItems.map(item => ({
+                            id: item.id,
+                            quantity: item.quantity,
+                        })),
                         receipt: `order_${Date.now()}`,
-                        notes: { userId: user?.uid },
+                        notes: {},
+                        couponCode: appliedCoupon?.code || undefined,
                     }),
                 });
 
                 if (!response.ok) {
-                    throw new Error('Failed to create payment order');
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'Failed to create payment order');
                 }
 
-                const { orderId } = await response.json();
+                const { orderId, amount: serverAmount, verifiedTotal, verificationDetails } = await response.json();
 
-                // 2. Open Razorpay payment modal
+                // Log verification for debugging
+                console.log('Server verified cart:', { verifiedTotal, verificationDetails, serverAmount });
+
+                // 4. Open Razorpay payment modal with SERVER-VERIFIED amount
                 await createRazorpayPayment(
                     {
-                        amount: cartTotal * 100,
+                        amount: serverAmount, // Use server-provided discounted amount (in paise)
                         orderId,
                         customerName: formData.fullName,
                         customerEmail: formData.email,
                         customerPhone: formData.phone,
                     },
-                    // On Success
                     async (paymentResponse: RazorpaySuccessResponse) => {
                         try {
-                            // 3. Verify payment
+                            // 3. Get Firebase ID token for verification
+                            if (!user) {
+                                throw new Error('User not authenticated');
+                            }
+                            const idToken = await user.getIdToken();
+
+                            // 4. Verify payment with authentication
                             const verifyRes = await fetch('/api/razorpay/verify', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${idToken}`,
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
                                 body: JSON.stringify(paymentResponse),
                             });
 
+
                             if (verifyRes.ok) {
-                                // 4. Create order in Firebase with payment ID
+                                const verifyData = await verifyRes.json();
+
+                                // Check if payment was already processed (replay attack prevention)
+                                if (verifyData.already_processed) {
+                                    console.log('Payment already verified previously:', {
+                                        payment_id: verifyData.payment_id,
+                                        order_id: verifyData.order_id,
+                                    });
+
+                                    showToast('Payment already processed. Redirecting to orders...', 'info');
+                                    router.push('/orders');
+                                    return;
+                                }
+
+                                // 4. Create order in Firebase (first time verification only)
                                 const order = await addOrder({
                                     ...orderData,
                                     paymentId: paymentResponse.razorpay_payment_id,
@@ -202,10 +344,16 @@ export default function CheckoutPage() {
         }
     };
 
-    // Redirect if not logged in
+    // If not logged in, show loading while redirecting (handled in useEffect)
     if (!user) {
-        router.push('/login?redirect=/checkout');
-        return null;
+        return (
+            <div className="page">
+                <Navbar />
+                <main style={{ paddingTop: '100px', textAlign: 'center' }}>
+                    <p>Redirecting to login...</p>
+                </main>
+            </div>
+        );
     }
 
     // Redirect if cart is empty
@@ -478,12 +626,61 @@ export default function CheckoutPage() {
                                             <div className="item-info">
                                                 <h4>{item.name}</h4>
                                                 <div className="item-meta">
-                                                    <span className="item-price">{item.price}</span>
+                                                    <div className="item-prices">
+                                                        <span className="item-price">₹{item.price}</span>
+                                                        {item.originalPrice && (
+                                                            <>
+                                                                <span className="item-original">₹{item.originalPrice}</span>
+                                                                <span className="discount-badge">{getDiscountPercent(item as any)}</span>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                     <span className="item-qty">Qty: {item.quantity}</span>
                                                 </div>
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+
+                                <div className="summary-divider"></div>
+
+                                {/* Coupon Section */}
+                                <div className="coupon-section">
+                                    {appliedCoupon ? (
+                                        <div className="applied-coupon">
+                                            <div className="coupon-info">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5">
+                                                    <path d="M15 5l-1.761 1.761a2 2 0 0 0 0 2.828L15 11.35m-6 0l1.761-1.761a2 2 0 0 0 0-2.828L9 5" />
+                                                    <path d="M19 19H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z" />
+                                                </svg>
+                                                <span className="code">{appliedCoupon.code}</span>
+                                            </div>
+                                            <button type="button" className="remove-btn" onClick={handleRemoveCoupon}>Remove</button>
+                                        </div>
+                                    ) : (
+                                        <div className="coupon-input-wrapper">
+                                            <div className="coupon-input">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Enter coupon code"
+                                                    value={couponCode}
+                                                    onChange={(e) => {
+                                                        setCouponCode(e.target.value.toUpperCase());
+                                                        if (couponError) setCouponError(null);
+                                                    }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="apply-btn"
+                                                    onClick={handleApplyCoupon}
+                                                    disabled={isValidatingCoupon || !couponCode.trim()}
+                                                >
+                                                    {isValidatingCoupon ? '...' : 'APPLY'}
+                                                </button>
+                                            </div>
+                                            {couponError && <p className="coupon-error">{couponError}</p>}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="summary-divider"></div>
@@ -496,10 +693,16 @@ export default function CheckoutPage() {
                                     <span>Shipping</span>
                                     <span className="free-shipping">FREE</span>
                                 </div>
+                                {discount > 0 && (
+                                    <div className="summary-row discount">
+                                        <span>Discount ({appliedCoupon?.code})</span>
+                                        <span>- ₹{discount.toLocaleString()}</span>
+                                    </div>
+                                )}
                                 <div className="summary-divider"></div>
                                 <div className="summary-row total">
                                     <span>Total</span>
-                                    <span>₹{cartTotal.toLocaleString()}</span>
+                                    <span>₹{finalTotal.toLocaleString()}</span>
                                 </div>
 
                                 <button
@@ -613,7 +816,24 @@ export default function CheckoutPage() {
 
                 .summary-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 14px; }
                 .summary-row.total { font-size: 18px; font-weight: 700; margin-bottom: 0; margin-top: 16px; }
+                .summary-row.discount { color: #22C55E; font-weight: 600; }
                 .free-shipping { color: #16A34A; font-weight: 600; }
+
+                /* Coupon Section */
+                .coupon-section { margin: 8px 0; }
+                .coupon-input { display: flex; gap: 8px; }
+                .coupon-input input { flex: 1; padding: 12px; border: 1px solid #E5E5E5; border-radius: 10px; font-size: 14px; outline: none; text-transform: uppercase; font-family: monospace; }
+                .coupon-input input:focus { border-color: #E85D04; }
+                .apply-btn { padding: 0 20px; background: #000; color: #fff; border: none; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+                .apply-btn:hover:not(:disabled) { background: #E85D04; }
+                .apply-btn:disabled { background: #EEE; color: #BBB; cursor: not-allowed; }
+                
+                .applied-coupon { display: flex; justify-content: space-between; align-items: center; background: rgba(34, 197, 94, 0.05); padding: 12px 16px; border-radius: 10px; border: 1px dashed #22C55E; }
+                .coupon-info { display: flex; align-items: center; gap: 8px; }
+                .coupon-info .code { font-size: 14px; font-weight: 700; color: #22C55E; font-family: monospace; }
+                .remove-btn { background: none; border: none; color: #DC2626; font-size: 12px; font-weight: 600; cursor: pointer; }
+                
+                .coupon-error { color: #DC2626; font-size: 11px; font-weight: 500; margin-top: 6px; margin-left: 4px; }
 
                 .place-order-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 16px; background: #E85D04; color: #FFFFFF; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-top: 20px; }
                 .place-order-btn:hover:not(:disabled) { background: #1A1A1A; }

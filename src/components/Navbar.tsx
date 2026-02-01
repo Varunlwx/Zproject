@@ -34,9 +34,9 @@ export default function Navbar() {
 
         // Filter products (limit to 5)
         const matchedProducts = products.filter(p =>
-            p.name.toLowerCase().includes(query) ||
-            p.category.toLowerCase().includes(query) ||
-            p.subcategory.toLowerCase().includes(query) ||
+            (p.name ?? '').toLowerCase().includes(query) ||
+            (p.category ?? '').toLowerCase().includes(query) ||
+            (p.subcategory ?? '').toLowerCase().includes(query) ||
             (p.tag && p.tag.toLowerCase().includes(query))
         ).slice(0, 5);
 
@@ -261,7 +261,7 @@ export default function Navbar() {
                                                                     </div>
                                                                     <div className="search-product-info">
                                                                         <span className="search-product-name">{product.name}</span>
-                                                                        <span className="search-product-meta">{product.subcategory} • {product.price}</span>
+                                                                        <span className="search-product-meta">{product.subcategory} • ₹{product.price}</span>
                                                                     </div>
                                                                 </button>
                                                             ))}

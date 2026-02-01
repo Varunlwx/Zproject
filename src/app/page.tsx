@@ -83,13 +83,13 @@ export default function HomePage() {
   const allReviews = [
     ...reviews.map(r => ({
       id: r.id,
-      productName: r.productName,
-      productImage: r.productImage,
+      productName: r.productName || 'ZCLOTHS Item',
+      productImage: r.productImage || '/images/products/placeholder.jpg',
       rating: r.rating,
       comment: r.comment,
       userName: r.userName,
       verified: r.verified,
-      images: r.images
+      images: r.images || []
     })),
     ...FALLBACK_REVIEWS
   ];
@@ -115,13 +115,21 @@ export default function HomePage() {
   ];
 
   const newArrivals = [
-    { id: 'kurta-1', name: 'Royal Silk Kurta', price: '₹2,499', tag: 'New', image: '/images/products/Kurta.jpg' },
-    { id: 'hoodie-1', name: 'Classic Hoodie', price: '₹1,899', tag: 'Trending', image: '/images/products/Hoddie-1.jpg' },
-    { id: 'hoodie-2', name: 'Premium Hoodie', price: '₹2,199', tag: '', image: '/images/products/Hoddie-2.jpg' },
-    { id: 'shirt-1', name: 'Formal Shirt', price: '₹1,599', tag: 'Bestseller', image: '/images/products/Shirt-1.jpg' },
-    { id: 'shirt-2', name: 'Casual Shirt', price: '₹1,399', tag: '', image: '/images/products/Shirt-2.jpg' },
-    { id: 'tshirt-1', name: 'Premium T-Shirt', price: '₹999', tag: 'New', image: '/images/products/Tshirt-1.jpg' },
+    { id: 'kurta-1', name: 'Royal Silk Kurta', price: '₹2,499', originalPrice: '₹2,999', tag: 'New', image: '/images/products/Kurta.jpg' },
+    { id: 'hoodie-1', name: 'Classic Hoodie', price: '₹1,899', originalPrice: '₹2,499', tag: 'Trending', image: '/images/products/Hoddie-1.jpg' },
+    { id: 'hoodie-2', name: 'Premium Hoodie', price: '₹2,199', originalPrice: '', tag: '', image: '/images/products/Hoddie-2.jpg' },
+    { id: 'shirt-1', name: 'Formal Shirt', price: '₹1,599', originalPrice: '₹1,999', tag: 'Bestseller', image: '/images/products/Shirt-1.jpg' },
+    { id: 'shirt-2', name: 'Casual Shirt', price: '₹1,399', originalPrice: '', tag: '', image: '/images/products/Shirt-2.jpg' },
+    { id: 'tshirt-1', name: 'Premium T-Shirt', price: '₹999', originalPrice: '₹1,299', tag: 'New', image: '/images/products/Tshirt-1.jpg' },
   ];
+
+  // Helper to calculate discount percentage for inline data
+  const calculateDiscount = (price: string, original: string) => {
+    if (!original) return null;
+    const p = parseInt(price.replace(/[₹,]/g, ''));
+    const o = parseInt(original.replace(/[₹,]/g, ''));
+    return Math.round(((o - p) / o) * 100) + '% OFF';
+  };
 
   const occasions = [
     { name: 'Wedding', image: '/images/products/Kurta.jpg' },
@@ -244,7 +252,7 @@ export default function HomePage() {
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      toggleWishlist(product);
+                      toggleWishlist(product as any);
                     }}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill={isInWishlist(product.id) ? '#E85D04' : 'none'} stroke={isInWishlist(product.id) ? '#E85D04' : 'currentColor'} strokeWidth="2">
@@ -255,7 +263,15 @@ export default function HomePage() {
                 <div className="product-info">
                   <h4>{product.name}</h4>
                   <div className="price-row">
-                    <p className="price">{product.price}</p>
+                    <div className="price-container">
+                      <p className="price">{product.price}</p>
+                      {product.originalPrice && (
+                        <>
+                          <p className="original-price">{product.originalPrice}</p>
+                          <span className="discount-badge">{calculateDiscount(product.price, product.originalPrice)}</span>
+                        </>
+                      )}
+                    </div>
                     <button
                       className="price-cart-btn"
                       onClick={(e) => {
@@ -273,15 +289,12 @@ export default function HomePage() {
                           sizes: ['S', 'M', 'L', 'XL'],
                           originalPrice: product.price // Using same for now
                         };
-                        addToCart(fullProduct);
+                        addToCart(fullProduct as any);
                       }}
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
                       </svg>
-                      {getCartItem(product.id)?.quantity && getCartItem(product.id)!.quantity > 0 && (
-                        <span className="cart-item-badge">{getCartItem(product.id)!.quantity}</span>
-                      )}
                     </button>
                   </div>
                 </div>

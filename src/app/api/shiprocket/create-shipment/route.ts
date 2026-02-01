@@ -1,9 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createShipment, ShipmentOrder } from '@/lib/shiprocket';
+import { requireAuth } from '@/lib/auth-middleware';
+import { requireValidOrigin } from '@/lib/csrf-protection';
+import { withRateLimit, highLimiter } from '@/lib/rate-limit';
+import { createShipmentSchema, formatValidationErrors } from '@/lib/validation-schemas';
 
 export async function POST(request: NextRequest) {
     try {
+        // 1. CSRF Protection
+        requireValidOrigin(request);
+
+        // 2. Authentication
+        const user = await requireAuth(request);
+
+        // 3. Rate Limiting
+        const rateLimitResponse = await withRateLimit(request, highLimiter, user.uid);
+        if (rateLimitResponse) return rateLimitResponse;
+
         const body = await request.json();
+
+        // 4. Input Validation (Zod)
+        const validation = createShipmentSchema.safeParse(body);
+        if (!validation.success) {
+            return NextResponse.json(
+                {
+                    error: 'Validation failed',
+                    details: formatValidationErrors(validation.error)
+                },
+                { status: 400 }
+            );
+        }
 
         const {
             orderId,
@@ -19,17 +45,10 @@ export async function POST(request: NextRequest) {
             items,
             paymentMethod,
             subTotal,
-            weight = 0.5, // Default weight in kg
-            dimensions = { length: 20, breadth: 15, height: 10 } // Default dimensions in cm
-        } = body;
+            weight = 0.5,
+            dimensions = { length: 20, breadth: 15, height: 10 }
+        } = validation.data;
 
-        // Validate required fields
-        if (!orderId || !customerName || !phone || !address || !city || !pincode || !state || !items?.length) {
-            return NextResponse.json(
-                { error: 'Missing required fields' },
-                { status: 400 }
-            );
-        }
 
         // Prepare shipment order for Shiprocket
         const shipmentOrder: ShipmentOrder = {
@@ -47,19 +66,30 @@ export async function POST(request: NextRequest) {
             billing_email: email || '',
             billing_phone: phone,
             shipping_is_billing: true,
-            order_items: items.map((item: { name: string; id: string; quantity: number; price: number }) => ({
-                name: item.name,
-                sku: item.id,
-                units: item.quantity,
-                selling_price: item.price,
-            })),
+            order_items: items.map((item: { name: string; id: string; quantity: number; price: string | number }) => {
+                const numericPrice = typeof item.price === 'number'
+                    ? item.price
+                    : parseFloat(item.price.replace(/[^\d.]/g, '')) || 0;
+
+                return {
+                    name: item.name,
+                    sku: item.id,
+                    units: item.quantity,
+                    selling_price: numericPrice,
+                };
+            }),
             payment_method: paymentMethod === 'cod' ? 'COD' : 'Prepaid',
-            sub_total: subTotal,
+            sub_total: typeof subTotal === 'number'
+                ? subTotal
+                : parseFloat(subTotal.toString().replace(/[^\d.]/g, '')) || 0,
             length: dimensions.length,
             breadth: dimensions.breadth,
             height: dimensions.height,
             weight: weight,
         };
+
+        // Log shipment creation for audit trail
+        console.log(`Shipment created by user ${user.uid} for order ${orderId}`);
 
         const shipment = await createShipment(shipmentOrder);
 
@@ -70,9 +100,19 @@ export async function POST(request: NextRequest) {
             awbCode: shipment.awb_code,
             courierName: shipment.courier_name,
             status: shipment.status,
+            userId: user.uid,
         });
     } catch (error) {
         console.error('Shiprocket create shipment error:', error);
+
+        // Handle authentication errors
+        if (error instanceof Error && error.message === 'Authentication required') {
+            return NextResponse.json(
+                { error: 'Please sign in to create shipment' },
+                { status: 401 }
+            );
+        }
+
         return NextResponse.json(
             { error: error instanceof Error ? error.message : 'Failed to create shipment' },
             { status: 500 }

@@ -6,7 +6,8 @@ import {
     addDoc,
     serverTimestamp,
     doc,
-    updateDoc
+    updateDoc,
+    getDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from './auth-context';
@@ -149,36 +150,50 @@ export function OrderProvider({ children }: { children: ReactNode }) {
             createdAt: new Date().toISOString()
         };
 
-        // Find the order and update the specific item with the review
+        // Find the order
         const order = orders.find(o => o.id === orderId);
-        if (!order) return;
+        if (!order) throw new Error('Order not found');
 
         const updatedItems = order.items.map(item => {
             if (item.id !== itemId) return item;
             return { ...item, review: reviewData };
         });
 
-        // Update the order document in Firestore
-        const orderRef = doc(db, `users/${user.uid}/orders`, orderId);
-        await updateDoc(orderRef, { items: updatedItems });
-
-        // Also save to public reviews collection
+        // STEP 1: Update the order document
+        console.log('[OrderContext] STEP 1: Updating order review state...');
         try {
-            const item = order.items.find(i => i.id === itemId);
-            if (item) {
+            const orderRef = doc(db, 'users', user.uid, 'orders', orderId);
+            await updateDoc(orderRef, { items: updatedItems });
+            console.log('[OrderContext] STEP 1 Success');
+        } catch (err: any) {
+            console.error('[OrderContext] STEP 1 FAILED', err);
+            throw err;
+        }
+
+        // STEP 2: Save to public reviews
+        const item = order.items.find(i => i.id === itemId);
+        if (item) {
+            console.log('[OrderContext] STEP 2: Saving public review...');
+            try {
                 await addDoc(collection(db, 'reviews'), {
+                    productId: itemId,
                     productName: item.name,
                     productImage: item.image,
+                    userId: user.uid,
+                    userName: userName || 'Anonymous',
                     rating: review.rating,
                     comment: review.comment,
-                    images: review.images,
-                    userName: userName || 'Anonymous',
+                    images: review.images || [],
                     verified: true,
+                    status: 'pending',
+                    likes: 0,
                     createdAt: serverTimestamp()
                 });
+                console.log('[OrderContext] STEP 2 Success');
+            } catch (err: any) {
+                console.error('[OrderContext] STEP 2 FAILED', err);
+                throw err;
             }
-        } catch (error) {
-            console.error('Error saving public review:', error);
         }
     };
 

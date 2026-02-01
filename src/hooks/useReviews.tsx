@@ -1,7 +1,7 @@
 'use client';
 
 import useSWR from 'swr';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 export interface PublicReview {
@@ -23,6 +23,7 @@ const reviewsFetcher = async () => {
     const reviewsRef = collection(db, 'reviews');
     const reviewsQuery = query(
         reviewsRef,
+        where('status', '==', 'approved'),
         orderBy('createdAt', 'desc'),
         limit(20)
     );

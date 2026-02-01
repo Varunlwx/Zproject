@@ -106,8 +106,25 @@ export interface Review {
     comment: string;
     images?: string[];
     verified: boolean;
+    status: 'pending' | 'approved' | 'rejected'; // Added for moderation
     createdAt: Timestamp | any;
     likes: number;
+}
+
+/**
+ * COUPON MODEL
+ * Collection: /coupons/{couponId}
+ */
+export interface Coupon {
+    id: string;
+    code: string;
+    type: 'percentage' | 'fixed';
+    value: number;
+    minOrderAmount: number;
+    expiryDate: Timestamp | any;
+    isActive: boolean;
+    usageLimit: number;
+    usageCount: number;
 }
 
 /**

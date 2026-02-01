@@ -9,19 +9,18 @@ import {
     ReactNode,
 } from 'react';
 import { ProductService, Product } from '@/services/product-service';
-// Fallback to static data if Firestore is unavailable
-import { products as staticProducts, getProductById as getStaticProductById } from '@/data/products';
 
 interface ProductContextType {
     products: Product[];
     loading: boolean;
     error: string | null;
-    getProductById: (id: string) => Product | undefined;
+    getProductById: (id: string) => Promise<Product | undefined>;
     getSimilarProducts: (product: Product, limit?: number) => Product[];
     searchProducts: (query: string) => Product[];
     getProductsByCategory: (category: string) => Product[];
     getProductsBySubcategory: (subcategory: string) => Product[];
     getDiscountPercent: (product: Product) => string;
+    setFilters: (filters: { category?: string; subcategory?: string }) => void;
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
@@ -30,53 +29,38 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [usingFallback, setUsingFallback] = useState(false);
+    const [activeFilters, setActiveFilters] = useState<{ category?: string; subcategory?: string }>({});
 
-    // Subscribe to Firestore products with fallback to static data
+    // Real-time subscription to Firebase
     useEffect(() => {
         setLoading(true);
+        console.log('[ProductContext] Connecting to Firebase with filters:', activeFilters);
 
-        // Timeout to fallback to static data if Firestore takes too long
-        const fallbackTimeout = setTimeout(() => {
-            if (products.length === 0 && loading) {
-                console.log('[ProductContext] Falling back to static data');
-                setProducts(staticProducts as Product[]);
-                setUsingFallback(true);
+        const unsubscribe = ProductService.subscribeToProducts(
+            (fetchedProducts) => {
+                setProducts(fetchedProducts);
                 setLoading(false);
-            }
-        }, 5000); // 5 second timeout
-
-        const unsubscribe = ProductService.subscribeToProducts((firestoreProducts) => {
-            clearTimeout(fallbackTimeout);
-
-            if (firestoreProducts.length > 0) {
-                setProducts(firestoreProducts);
-                setUsingFallback(false);
-            } else if (!usingFallback) {
-                // Firestore returned empty, use static data
-                console.log('[ProductContext] Firestore empty, using static data');
-                setProducts(staticProducts as Product[]);
-                setUsingFallback(true);
-            }
-            setLoading(false);
-            setError(null);
-        });
+                setError(null);
+            },
+            activeFilters
+        );
 
         return () => {
-            clearTimeout(fallbackTimeout);
+            console.log('[ProductContext] Unsubscribing from Firebase');
             unsubscribe();
         };
-    }, []);
+    }, [activeFilters]);
 
     const getProductById = useCallback(
-        (id: string): Product | undefined => {
-            // First try from current products
-            const product = products.find(p => p.id === id);
-            if (product) return product;
+        async (id: string): Promise<Product | undefined> => {
+            // First check local products (fastest)
+            const local = products.find(p => p.id === id);
+            if (local) return local;
 
-            // Fallback to static data
-            const staticProduct = getStaticProductById(id);
-            return staticProduct as Product | undefined;
+            // If not found (e.g., due to filtering), fetch directly from Firebase
+            console.log(`[ProductContext] Product ${id} not in local state, fetching from Firebase...`);
+            const remote = await ProductService.getProductById(id);
+            return remote || undefined;
         },
         [products]
     );
@@ -110,6 +94,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         [products]
     );
 
+    const setFilters = useCallback((filters: { category?: string; subcategory?: string }) => {
+        setActiveFilters(filters);
+    }, []);
+
     const getDiscountPercent = useCallback(
         (product: Product): string => {
             return ProductService.getDiscountPercent(product);
@@ -129,6 +117,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
                 getProductsByCategory,
                 getProductsBySubcategory,
                 getDiscountPercent,
+                setFilters,
             }}
         >
             {children}
